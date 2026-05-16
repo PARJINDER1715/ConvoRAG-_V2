@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ConvoRAG v2</title>
+<style>
+:root{
+  --bg:#07090f;--s1:#0d1117;--s2:#111827;--s3:#1a2333;
+  --border:#1e2d42;--accent:#3b82f6;--accent2:#6366f1;
+  --green:#10b981;--amber:#f59e0b;--red:#ef4444;--cyan:#06b6d4;--purple:#8b5cf6;
+  --text:#dde8f8;--muted:#5a6f8a;--dim:#1a2840;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--dim);border-radius:2px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+
+#app{display:grid;grid-template-rows:auto 1fr;height:100vh;overflow:hidden}
+
+/* Header */
+header{background:var(--s1);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;flex-shrink:0}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-icon{width:30px;height:30px;border-radius:7px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:15px}
+.brand-name{font-size:16px;font-weight:800;color:#f0f6ff;letter-spacing:-.3px}
+.brand-sub{font-size:11px;color:var(--muted)}
+.nav{display:flex;gap:2px;flex-wrap:wrap}
+.nb{padding:6px 12px;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-weight:600;transition:.12s}
+.nb:hover{border-color:var(--border);color:var(--text)}
+.nb.on{background:var(--s3);border-color:var(--border);color:var(--accent)}
+
+/* Panels */
+.panels{overflow:hidden;position:relative}
+.panel{display:none;height:100%;overflow-y:auto;padding:20px;flex-direction:column;gap:14px;animation:fade .2s ease}
+.panel.on{display:flex}
+#chat-panel.on{padding:0;overflow:hidden}
+
+/* Section head */
+.sh{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px}
+.sh h2{font-size:17px;font-weight:800;color:#f0f6ff}
+.sh p{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.6}
+
+/* Buttons */
+.btn{padding:7px 14px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:600;transition:.12s;white-space:nowrap}
+.btn-blue{background:var(--accent);color:#fff}.btn-blue:hover{background:#2563eb}
+.btn-green{background:var(--green);color:#fff}
+.btn-cyan{background:var(--cyan);color:#fff}
+.btn-purple{background:var(--purple);color:#fff}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* Progress */
+.prog{height:3px;background:var(--dim);border-radius:2px;overflow:hidden}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .3s ease}
+
+/* Cards */
+.card{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:16px}
+.card-hd{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.card-title{font-size:13px;font-weight:700;color:#c5d4ed}
+.cnt{margin-left:auto;background:var(--dim);color:var(--muted);font-size:10px;padding:2px 7px;border-radius:20px;font-weight:700}
+
+/* Grid */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+
+/* Info */
+.info{display:flex;gap:10px;background:var(--s1);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px;padding:12px 14px;font-size:12px;color:var(--muted);line-height:1.7}
+
+/* List items */
+.list{display:flex;flex-direction:column;gap:5px;max-height:360px;overflow-y:auto}
+.li{background:var(--s2);border:1px solid var(--border);border-radius:7px;padding:9px 11px;cursor:pointer;transition:border-color .12s}
+.li:hover,.li.open{border-color:var(--accent)}
+.li-hd{display:flex;align-items:center;gap:6px}
+.badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px}
+.b-blue{background:rgba(59,130,246,.15);color:#60a5fa}
+.b-green{background:rgba(16,185,129,.12);color:#34d399}
+.b-amber{background:rgba(245,158,11,.12);color:#fbbf24}
+.b-red{background:rgba(239,68,68,.12);color:#f87171}
+.b-purple{background:rgba(139,92,246,.12);color:#a78bfa}
+.b-cyan{background:rgba(6,182,212,.12);color:#22d3ee}
+.li-r{font-size:10px;color:var(--muted);margin-left:auto}
+.li-title{font-size:12px;font-weight:600;color:#bdd0eb;margin-top:4px}
+.li-body{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.6;border-top:1px solid var(--border);padding-top:7px;display:none;white-space:pre-wrap}
+.empty{color:var(--muted);font-size:12px;text-align:center;padding:18px 0}
+
+/* Input */
+input,textarea{background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;width:100%}
+input:focus,textarea:focus{border-color:var(--accent)}
+.qrow{display:flex;gap:8px;margin-bottom:8px}
+
+/* Answer */
+.ans{background:var(--s2);border:1px solid var(--border);border-left:3px solid var(--green);border-radius:6px;padding:12px 14px;margin-top:6px;animation:fade .2s ease}
+.ans-lbl{font-size:10px;font-weight:700;color:var(--green);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px}
+.ans-txt{font-size:13px;color:#c5d4ed;line-height:1.75;white-space:pre-wrap}
+.warn{background:var(--s2);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:6px;padding:10px 14px;font-size:12px;color:#fbbf24;margin-top:6px}
+.err{border-left-color:var(--red);color:#f87171}
+
+/* Spinner */
+.spin-wrap{display:none;align-items:center;gap:8px;font-size:12px;color:var(--muted);padding:5px 0}
+.spinner{width:13px;height:13px;border:2px solid var(--dim);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+
+/* Timeline */
+.timeline{display:flex;flex-direction:column;gap:0}
+.tl-item{display:flex;gap:12px;position:relative}
+.tl-item::before{content:'';position:absolute;left:17px;top:28px;bottom:-4px;width:2px;background:var(--border)}
+.tl-item:last-child::before{display:none}
+.tl-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:14px;border:2px solid var(--border);z-index:1}
+.tl-card{flex:1;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer;transition:border-color .12s}
+.tl-card:hover,.tl-card.open{border-color:var(--accent)}
+.tl-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tl-day{font-size:11px;color:var(--muted);font-weight:700}
+.tl-tone{font-size:12px;font-weight:600;color:#f0f6ff}
+.tl-mood{font-size:10px}
+.tl-body{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.6;display:none}
+
+/* Intent demo */
+.intent-grid{display:flex;flex-direction:column;gap:6px}
+.intent-row{display:flex;align-items:center;gap:10px;background:var(--s2);border:1px solid var(--border);border-radius:7px;padding:9px 11px}
+.intent-msg{flex:1;font-size:12px;color:#c5d4ed}
+.intent-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap}
+.intent-conf{font-size:11px;color:var(--muted);white-space:nowrap}
+.intent-ms{font-size:10px;color:var(--dim);white-space:nowrap}
+.conf-bar{height:3px;background:var(--dim);border-radius:2px;margin-top:4px;overflow:hidden}
+.conf-fill{height:100%;border-radius:2px;transition:width .4s ease}
+
+/* Chunk scores */
+.chunk-scores{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.score-box{background:var(--s2);border-radius:6px;padding:8px 10px;text-align:center}
+.score-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.score-val{font-size:18px;font-weight:700;margin-top:2px}
+
+/* Chat */
+.chat-wrap{display:flex;flex-direction:column;height:100%}
+.chat-top{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border);background:var(--s1);flex-shrink:0}
+.chat-ava{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.chat-name{font-weight:700;color:#f0f6ff;font-size:13px}
+.chat-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.welcome{display:flex;flex-direction:column;align-items:center;padding:20px 0;gap:7px;text-align:center}
+.welcome h3{font-size:14px;color:#c5d4ed}
+.welcome p{font-size:12px;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:8px}
+.chip{font-size:11px;color:#60a5fa;background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.15);border-radius:20px;padding:5px 11px;cursor:pointer}
+.chip:hover{background:rgba(59,130,246,.14)}
+.msg{display:flex;align-items:flex-end;gap:7px;animation:fade .15s ease}
+.msg.u{flex-direction:row-reverse}
+.m-ava{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+.bubble{max-width:72%;padding:9px 13px;border-radius:12px;font-size:13px;line-height:1.6;white-space:pre-wrap}
+.bubble.u{background:var(--accent);color:#fff;border-bottom-right-radius:3px}
+.bubble.b{background:var(--s3);color:var(--text);border-bottom-left-radius:3px}
+.typing{background:var(--s3);border-radius:12px;border-bottom-left-radius:3px;padding:10px 14px;display:flex;gap:4px;align-items:center}
+.typing span{width:6px;height:6px;background:var(--muted);border-radius:50%;animation:pulse 1.2s ease infinite}
+.typing span:nth-child(2){animation-delay:.2s}
+.typing span:nth-child(3){animation-delay:.4s}
+.chat-bar{display:flex;gap:8px;padding:12px 14px;border-top:1px solid var(--border);background:var(--s1);flex-shrink:0}
+.chat-bar input{flex:1}
+.send{width:38px;height:38px;border-radius:7px;background:var(--accent);border:none;color:#fff;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.send:disabled{background:var(--dim);color:var(--muted);cursor:not-allowed}
+
+/* Drift badge colors */
+.tone-curious{background:rgba(59,130,246,.15);color:#60a5fa}
+.tone-casual{background:rgba(16,185,129,.12);color:#34d399}
+.tone-playful{background:rgba(245,158,11,.12);color:#fbbf24}
+.tone-frustrated{background:rgba(239,68,68,.12);color:#f87171}
+.tone-formal{background:rgba(139,92,246,.12);color:#a78bfa}
+.tone-excited{background:rgba(6,182,212,.12);color:#22d3ee}
+.tone-anxious{background:rgba(245,158,11,.15);color:#fcd34d}
+.tone-sad{background:rgba(99,102,241,.12);color:#818cf8}
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+  <div class="brand">
+    <div class="brand-icon">◈</div>
+    <div>
+      <div class="brand-name">ConvoRAG v2</div>
+      <div class="brand-sub" id="hdr-sub">connecting…</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <button class="nb on"  onclick="tab('drift')">📈 Persona Drift</button>
+    <button class="nb"     onclick="tab('intent')">🎯 Intent Classifier</button>
+    <button class="nb"     onclick="tab('resolve')">⚖️ Conflict Resolver</button>
+    <button class="nb"     onclick="tab('rag')">🗂 RAG System</button>
+    <button class="nb"     onclick="tab('chat')">💬 Chatbot</button>
+  </nav>
+</header>
+
+<div class="panels">
+
+<!-- ═══ PART 1: PERSONA DRIFT ═══ -->
+<div class="panel on" id="drift-panel">
+  <div class="sh">
+    <div>
+      <h2>📈 Part 1 — Adaptive Persona Engine</h2>
+      <p>Tracks mood & tone drift day-by-day. Detects triggers (topic, person, event) that caused each shift.</p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select id="drift-days" style="background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px">
+        <option value="7">7 days</option>
+        <option value="15" selected>15 days</option>
+        <option value="20">20 days</option>
+        <option value="30">30 days</option>
+      </select>
+      <button class="btn btn-blue" onclick="runDrift()" id="drift-btn">▶ Analyze Drift</button>
+    </div>
+  </div>
+
+  <div class="info" id="drift-info">
+    <span>💡</span>
+    <div>Select number of days and click <b>Analyze Drift</b>. Uses <b>100% local lexicon-based analysis</b> — no API calls. Detects tone, mood, energy, formality, and what triggered each change.</div>
+  </div>
+
+  <div class="spin-wrap" id="drift-spin"><div class="spinner"></div><span>Analyzing persona drift…</span></div>
+
+  <div id="drift-summary" style="display:none"></div>
+
+  <div class="g2" id="drift-cols" style="display:none">
+    <div class="card">
+      <div class="card-hd"><span>📅</span><span class="card-title">Day-by-Day Timeline</span><span class="cnt" id="tl-cnt">0</span></div>
+      <div class="timeline" id="tl-list"></div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><span>🔀</span><span class="card-title">Drift Events</span><span class="cnt" id="drift-cnt">0</span></div>
+      <div class="list" id="drift-list"><div class="empty">No drifts detected yet.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PART 2: INTENT CLASSIFIER ═══ -->
+<div class="panel" id="intent-panel">
+  <div class="sh">
+    <div>
+      <h2>🎯 Part 2 — Offline Intent Classifier</h2>
+      <p>TF-IDF + SGD model · &lt;100KB · runs on CPU · &lt;200ms · fully offline · 5 intent classes</p>
+    </div>
+    <button class="btn btn-green" onclick="runIntentDemo()" id="intent-demo-btn">▶ Run Demo on Dataset</button>
+  </div>
+
+  <div class="g3">
+    <div class="card" style="text-align:center">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Model Size</div>
+      <div style="font-size:28px;font-weight:800;color:var(--green);margin-top:4px" id="model-size">…</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">target: &lt;50MB ✓</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Avg Latency</div>
+      <div style="font-size:28px;font-weight:800;color:var(--cyan);margin-top:4px" id="avg-latency">…</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">target: &lt;200ms ✓</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">API Calls</div>
+      <div style="font-size:28px;font-weight:800;color:var(--green);margin-top:4px">0</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">100% offline ✓</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><span>🧪</span><span class="card-title">Test Single Message</span></div>
+    <div class="qrow">
+      <input id="intent-input" placeholder="Type a message to classify… e.g. remind me to call mom" onkeydown="if(event.key==='Enter')testIntent()"/>
+      <button class="btn btn-cyan" onclick="testIntent()">Classify</button>
+    </div>
+    <div id="intent-result" style="display:none"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><span>📊</span><span class="card-title">Dataset Demo — User 1 Messages</span><span class="cnt" id="demo-cnt">0</span></div>
+    <div class="spin-wrap" id="intent-spin"><div class="spinner"></div><span>Classifying messages…</span></div>
+    <div class="intent-grid" id="intent-demo-list"><div class="empty">Click "Run Demo" to classify 20 real messages from the dataset.</div></div>
+  </div>
+</div>
+
+<!-- ═══ PART 3: CONFLICT RESOLVER ═══ -->
+<div class="panel" id="resolve-panel">
+  <div class="sh">
+    <div>
+      <h2>⚖️ Part 3 — Conflict Resolution in RAG</h2>
+      <p>Ranks chunks by recency + emotional weight · detects contradictions · merges coherent answer</p>
+    </div>
+  </div>
+
+  <div class="info">
+    <span>🔬</span>
+    <div>Try queries like: <b>"Did I mention my sister?"</b> or <b>"What did I say about work?"</b> or <b>"Tell me about my family"</b>. The resolver finds all matching chunks, ranks them, flags contradictions, and returns a merged answer.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><span>🔍</span><span class="card-title">Conflict-Aware Query</span></div>
+    <div class="qrow">
+      <input id="resolve-q" placeholder="e.g. Did I mention my sister?" onkeydown="if(event.key==='Enter')runResolve()"/>
+      <button class="btn btn-purple" onclick="runResolve()" id="resolve-btn">Resolve</button>
+    </div>
+    <div class="spin-wrap" id="resolve-spin"><div class="spinner"></div><span>Searching + resolving conflicts…</span></div>
+    <div id="resolve-result" style="display:none"></div>
+  </div>
+
+  <div class="card" id="resolve-chunks-card" style="display:none">
+    <div class="card-hd"><span>📦</span><span class="card-title">Ranked Chunks</span><span class="cnt" id="rc-cnt">0</span></div>
+    <div class="list" id="rc-list"></div>
+  </div>
+</div>
+
+<!-- ═══ RAG SYSTEM ═══ -->
+<div class="panel" id="rag-panel">
+  <div class="sh">
+    <div><h2>🗂 RAG System</h2><p>Build knowledge base · semantic search · LLM-powered answers via Groq</p></div>
+    <button class="btn btn-blue" id="rag-btn" onclick="runRAG()">▶ Build Knowledge Base</button>
+  </div>
+  <div class="prog" id="rag-prog" style="display:none"><div class="prog-fill" id="rag-fill" style="width:0%"></div></div>
+  <div class="info" id="rag-info">
+    <span>💡</span>
+    <div>Process conversations → detect topics → summarize every 100 messages → build searchable knowledge base.</div>
+  </div>
+  <div class="g2">
+    <div class="card">
+      <div class="card-hd"><span>📌</span><span class="card-title">Topic Checkpoints</span><span class="cnt" id="t-cnt">0</span></div>
+      <div class="list" id="t-list"><div class="empty">Run build first.</div></div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><span>📊</span><span class="card-title">100-Msg Checkpoints</span><span class="cnt" id="c-cnt">0</span></div>
+      <div class="list" id="c-list"><div class="empty">Run build first.</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-hd"><span>🔍</span><span class="card-title">RAG Query</span></div>
+    <div class="qrow">
+      <input id="rag-q" placeholder="Ask anything about the conversations…" onkeydown="if(event.key==='Enter')doRAGQuery()"/>
+      <button class="btn btn-cyan" onclick="doRAGQuery()" id="rag-ask-btn">Ask</button>
+    </div>
+    <div class="spin-wrap" id="rag-spin"><div class="spinner"></div><span>Searching…</span></div>
+    <div id="rag-ans" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ═══ CHAT ═══ -->
+<div class="panel" id="chat-panel">
+  <div class="chat-wrap">
+    <div class="chat-top">
+      <div class="chat-ava">◈</div>
+      <div>
+        <div class="chat-name">ConvoRAG Assistant</div>
+        <div class="chat-sub" id="chat-sub">Ready</div>
+      </div>
+    </div>
+    <div class="msgs" id="msgs">
+      <div class="welcome">
+        <h3>Ask me about this user</h3>
+        <p>Uses RAG context + persona + Groq LLM to answer</p>
+        <div class="chips">
+          <div class="chip" onclick="ci(this)">What kind of person is this user?</div>
+          <div class="chip" onclick="ci(this)">What are their hobbies?</div>
+          <div class="chip" onclick="ci(this)">How do they communicate?</div>
+          <div class="chip" onclick="ci(this)">What are their habits?</div>
+          <div class="chip" onclick="ci(this)">What topics came up most?</div>
+        </div>
+      </div>
+    </div>
+    <div class="chat-bar">
+      <input id="chat-in" placeholder="Ask about this user…" onkeydown="if(event.key==='Enter')doChat()"/>
+      <button class="send" id="send-btn" onclick="doChat()">➤</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- /panels -->
+</div>
+
+<script>
+const API = 'http://localhost:5000/api';
+let S = { topics:[], chunks:[], persona:null, history:[], building:false };
+
+const INTENT_COLORS = {
+  'reminder':         {bg:'rgba(16,185,129,.12)',color:'#34d399'},
+  'emotional-support':{bg:'rgba(239,68,68,.12)', color:'#f87171'},
+  'action-item':      {bg:'rgba(59,130,246,.15)',color:'#60a5fa'},
+  'small-talk':       {bg:'rgba(245,158,11,.12)',color:'#fbbf24'},
+  'unknown':          {bg:'rgba(99,102,241,.12)',color:'#818cf8'},
+};
+const TONE_COLORS = {
+  curious:'#60a5fa', casual:'#34d399', playful:'#fbbf24',
+  frustrated:'#f87171', formal:'#a78bfa', excited:'#22d3ee',
+  anxious:'#fcd34d', sad:'#818cf8', neutral:'#5a6f8a',
+};
+
+// ── Tab ──────────────────────────────────────────────────────────────────────
+function tab(id) {
+  ['drift','intent','resolve','rag','chat'].forEach(t => {
+    const p = document.getElementById(t+'-panel');
+    p.classList.toggle('on', t===id);
+    if(t==='chat') p.style.display = (t===id)?'flex':'none';
+  });
+  document.querySelectorAll('.nb').forEach((b,i)=>
+    b.classList.toggle('on', ['drift','intent','resolve','rag','chat'][i]===id));
+}
+
+// ── Load info ────────────────────────────────────────────────────────────────
+async function loadInfo() {
+  try {
+    const d = await get('/info');
+    document.getElementById('hdr-sub').textContent =
+      `${d.total_messages.toLocaleString()} msgs · ${d.total_days.toLocaleString()} days · intent: ${d.intent_model_kb}KB`;
+    document.getElementById('model-size').textContent = d.intent_model_kb+'KB';
+  } catch(e) {
+    document.getElementById('hdr-sub').textContent = '⚠ Cannot connect — is app.py running?';
+    document.getElementById('hdr-sub').style.color = '#ef4444';
+  }
+}
+loadInfo();
+
+// ── PART 1: Persona Drift ────────────────────────────────────────────────────
+async function runDrift() {
+  const days = document.getElementById('drift-days').value;
+  setLoading('drift-spin', true);
+  setLoading('drift-btn', true, 'Analyzing…');
+  document.getElementById('drift-info').style.display = 'none';
+  document.getElementById('drift-cols').style.display = 'none';
+  document.getElementById('drift-summary').style.display = 'none';
+
+  try {
+    const d = await post('/persona/drift', { days: parseInt(days) });
+    renderDriftSummary(d.summary);
+    renderTimeline(d.timeline);
+    renderDriftEvents(d.drift_events);
+    document.getElementById('drift-cols').style.display = 'grid';
+  } catch(e) { alert('Error: '+e.message); }
+  setLoading('drift-spin', false);
+  setLoading('drift-btn', false, '↺ Re-analyze');
+}
+
+function renderDriftSummary(s) {
+  const el = document.getElementById('drift-summary');
+  el.style.display = 'grid';
+  el.style.gridTemplateColumns = 'repeat(4,1fr)';
+  el.style.gap = '10px';
+  el.innerHTML = [
+    ['Days Analyzed', s.total_days, '#60a5fa'],
+    ['Drift Events', s.total_drifts, '#f87171'],
+    ['Overall Tone', s.dominant_overall_tone, '#34d399'],
+    ['Top Trigger', s.most_common_trigger, '#fbbf24'],
+  ].map(([label, val, color]) => `
+    <div class="card" style="text-align:center">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${label}</div>
+      <div style="font-size:20px;font-weight:800;color:${color};margin-top:4px">${val}</div>
+    </div>`).join('');
+}
+
+function renderTimeline(timeline) {
+  const list = document.getElementById('tl-list');
+  document.getElementById('tl-cnt').textContent = timeline.length;
+  list.innerHTML = '';
+  timeline.forEach(t => {
+    const color = TONE_COLORS[t.label.split(' ')[0]] || '#5a6f8a';
+    const moodEmoji = {positive:'😊', negative:'😔', neutral:'😐'}[t.mood] || '😐';
+    const item = mk('div','tl-item');
+    item.innerHTML = `
+      <div class="tl-dot" style="background:${color}"></div>
+      <div class="tl-card">
+        <div class="tl-hd">
+          <span class="tl-day">Day ${t.day+1}</span>
+          <span class="badge" style="background:${color}22;color:${color}">${t.label}</span>
+          <span class="tl-mood">${moodEmoji} ${t.mood}</span>
+          <span style="margin-left:auto;font-size:10px;color:var(--muted)">
+            E:${(t.energy*100).toFixed(0)}% F:${(t.formality*100).toFixed(0)}%
+          </span>
+        </div>
+        <div class="tl-body">
+          ${t.triggers.length ? '<b>Triggers:</b> '+t.triggers.join(', ')+'<br>' : ''}
+          ${t.people.length ? '<b>People:</b> '+t.people.join(', ')+'<br>' : ''}
+          ${t.topics.length ? '<b>Topics:</b> '+t.topics.join(', ')+'<br>' : ''}
+          <b>Sample:</b> "${esc(t.sample)}"
+        </div>
+      </div>`;
+    item.querySelector('.tl-card').onclick = () => {
+      const body = item.querySelector('.tl-body');
+      const open = body.style.display === 'block';
+      body.style.display = open ? 'none' : 'block';
+      item.querySelector('.tl-card').classList.toggle('open', !open);
+    };
+    list.appendChild(item);
+  });
+}
+
+function renderDriftEvents(events) {
+  const list = document.getElementById('drift-list');
+  document.getElementById('drift-cnt').textContent = events.length;
+  if (!events.length) { list.innerHTML = '<div class="empty">No significant drifts detected in this range.</div>'; return; }
+  list.innerHTML = '';
+  events.forEach(ev => {
+    const fromColor = TONE_COLORS[ev.from_tone] || '#5a6f8a';
+    const toColor   = TONE_COLORS[ev.to_tone] || '#5a6f8a';
+    const el = mk('div','li');
+    el.innerHTML = `
+      <div class="li-hd">
+        <span class="badge" style="background:${fromColor}22;color:${fromColor}">${ev.from_tone}</span>
+        <span style="color:var(--muted);font-size:11px">→</span>
+        <span class="badge" style="background:${toColor}22;color:${toColor}">${ev.to_tone}</span>
+        <span class="badge b-amber" style="margin-left:4px">${ev.trigger_type}</span>
+        <span class="li-r">D${ev.from_day+1}→D${ev.to_day+1} · ${(ev.drift_magnitude*100).toFixed(0)}%</span>
+      </div>
+      <div class="li-title">${esc(ev.trigger_text)}</div>
+      <div class="li-body">${esc(ev.description)}</div>`;
+    el.onclick = () => toggle(el);
+    list.appendChild(el);
+  });
+}
+
+// ── PART 2: Intent Classifier ────────────────────────────────────────────────
+async function testIntent() {
+  const msg = document.getElementById('intent-input').value.trim();
+  if (!msg) return;
+  try {
+    const d = await post('/intent', { message: msg });
+    const ic = INTENT_COLORS[d.intent] || INTENT_COLORS.unknown;
+    document.getElementById('intent-result').style.display = 'block';
+    document.getElementById('intent-result').innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
+        <span class="badge" style="background:${ic.bg};color:${ic.color};font-size:13px;padding:4px 12px">${d.intent}</span>
+        <span style="font-size:13px;color:var(--text)">Confidence: <b>${(d.confidence*100).toFixed(1)}%</b></span>
+        <span style="font-size:12px;color:var(--muted)">${d.latency_ms}ms</span>
+      </div>
+      <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px">
+        ${d.top_3.map(([k,v])=>`
+          <div style="background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:6px 10px">
+            <div style="font-size:10px;color:var(--muted)">${k}</div>
+            <div style="font-size:13px;font-weight:700;color:${(INTENT_COLORS[k]||INTENT_COLORS.unknown).color}">${(v*100).toFixed(1)}%</div>
+          </div>`).join('')}
+      </div>`;
+  } catch(e) { alert('Error: '+e.message); }
+}
+
+async function runIntentDemo() {
+  setLoading('intent-spin', true);
+  setLoading('intent-demo-btn', true, 'Classifying…');
+  try {
+    const d = await get('/intent/demo');
+    document.getElementById('model-size').textContent = d.model_size_kb+'KB';
+    const latencies = d.demo_results.map(r=>r.latency_ms);
+    document.getElementById('avg-latency').textContent = (latencies.reduce((a,b)=>a+b,0)/latencies.length).toFixed(1)+'ms';
+    document.getElementById('demo-cnt').textContent = d.demo_results.length;
+    const list = document.getElementById('intent-demo-list');
+    list.innerHTML = '';
+    d.demo_results.forEach(r => {
+      const ic = INTENT_COLORS[r.intent] || INTENT_COLORS.unknown;
+      const el = mk('div','intent-row');
+      el.innerHTML = `
+        <div class="intent-msg">
+          <div>${esc(r.message)}</div>
+          <div class="conf-bar"><div class="conf-fill" style="width:${r.confidence*100}%;background:${ic.color}"></div></div>
+        </div>
+        <span class="intent-badge" style="background:${ic.bg};color:${ic.color}">${r.intent}</span>
+        <span class="intent-conf">${(r.confidence*100).toFixed(0)}%</span>
+        <span class="intent-ms">${r.latency_ms}ms</span>`;
+      list.appendChild(el);
+    });
+  } catch(e) { alert('Error: '+e.message); }
+  setLoading('intent-spin', false);
+  setLoading('intent-demo-btn', false, '↺ Re-run Demo');
+}
+
+// ── PART 3: Conflict Resolver ────────────────────────────────────────────────
+async function runResolve() {
+  const q = document.getElementById('resolve-q').value.trim();
+  if (!q) return;
+  setLoading('resolve-spin', true);
+  setLoading('resolve-btn', true, 'Resolving…');
+  document.getElementById('resolve-result').style.display = 'none';
+  document.getElementById('resolve-chunks-card').style.display = 'none';
+  try {
+    const d = await post('/rag/resolve', { query: q });
+    const resultEl = document.getElementById('resolve-result');
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = `
+      <div class="ans">
+        <div class="ans-lbl">Resolved Answer · Strategy: ${d.merge_strategy} · Confidence: ${(d.confidence*100).toFixed(0)}%</div>
+        <div class="ans-txt">${esc(d.answer)}</div>
+      </div>
+      ${d.contradictions_found ? `
+        <div class="warn">
+          ⚠️ Contradictions detected across ${d.chunks_found} chunks:<br>
+          ${d.contradiction_details.map(c=>`• ${esc(c)}`).join('<br>')}
+        </div>` : `
+        <div style="background:var(--s2);border:1px solid var(--border);border-left:3px solid var(--green);border-radius:6px;padding:10px 14px;font-size:12px;color:#34d399;margin-top:6px">
+          ✓ No contradictions detected across ${d.chunks_found} retrieved chunks
+        </div>`}`;
+
+    if (d.ranked_chunks?.length) {
+      renderRankedChunks(d.ranked_chunks);
+      document.getElementById('resolve-chunks-card').style.display = 'block';
+    }
+  } catch(e) { alert('Error: '+e.message); }
+  setLoading('resolve-spin', false);
+  setLoading('resolve-btn', false, 'Resolve');
+}
+
+function renderRankedChunks(chunks) {
+  const list = document.getElementById('rc-list');
+  document.getElementById('rc-cnt').textContent = chunks.length;
+  list.innerHTML = '';
+  chunks.forEach((c, i) => {
+    const el = mk('div','li');
+    const valColor = {positive:'#34d399',negative:'#f87171',neutral:'#5a6f8a'}[c.emotion_valence]||'#5a6f8a';
+    el.innerHTML = `
+      <div class="li-hd">
+        <span class="badge b-blue">#${i+1}</span>
+        <span style="font-size:11px;color:var(--text)">Score: <b>${c.final_score}</b></span>
+        <span class="badge" style="background:${valColor}22;color:${valColor}">${c.emotion_valence}</span>
+        <span class="li-r">Day ${c.day} · msgs ${c.start_msg}-${c.end_msg}</span>
+      </div>
+      <div class="chunk-scores">
+        <div class="score-box"><div class="score-label">Relevance</div><div class="score-val" style="color:#60a5fa">${(c.relevance_score*100).toFixed(0)}%</div></div>
+        <div class="score-box"><div class="score-label">Recency</div><div class="score-val" style="color:#34d399">${(c.recency_score*100).toFixed(0)}%</div></div>
+        <div class="score-box"><div class="score-label">Emotion</div><div class="score-val" style="color:#fbbf24">${(c.emotional_weight*100).toFixed(0)}%</div></div>
+      </div>
+      <div class="li-body">${esc(c.snippet)}</div>`;
+    el.onclick = () => toggle(el);
+    list.appendChild(el);
+  });
+}
+
+// ── RAG System ───────────────────────────────────────────────────────────────
+async function runRAG() {
+  if (S.building) return;
+  S.building = true;
+  S.topics=[]; S.chunks=[];
+  const btn = document.getElementById('rag-btn');
+  btn.disabled = true; btn.textContent = 'Building…';
+  document.getElementById('rag-info').style.display = 'none';
+  document.getElementById('rag-prog').style.display = 'block';
+  document.getElementById('t-list').innerHTML = '';
+  document.getElementById('c-list').innerHTML = '';
+  const [segs, chunks100] = await Promise.all([get('/segments'), get('/chunks100')]);
+  const total = segs.length + chunks100.length;
+  let done = 0, prevTopic = 'none';
+  for (const seg of segs) {
+    try {
+      const r = await post('/process_segment', {segment:seg, prev_topic:prevTopic});
+      prevTopic = r.topic||prevTopic;
+      if (r.changed||S.topics.length===0) S.topics.push({id:S.topics.length,topic:r.topic,start:seg.start,end:seg.end,summary:r.summary});
+      else { const l=S.topics[S.topics.length-1]; l.end=seg.end; if((l.summary||'').length<500) l.summary=(l.summary||'')+' '+(r.summary||''); }
+      renderTopics();
+    } catch(e){}
+    done++; setFill(done/total*100);
+  }
+  for (const c of chunks100) {
+    try {
+      const r = await post('/summarize_chunk',{chunk:c});
+      S.chunks.push({id:c.id,start:c.start,end:c.end,summary:r.summary});
+      renderChunks();
+    } catch(e){}
+    done++; setFill(done/total*100);
+  }
+  S.building=false; btn.disabled=false; btn.textContent='↺ Rebuild';
+}
+function setFill(p){document.getElementById('rag-fill').style.width=p+'%'}
+function renderTopics(){
+  const l=document.getElementById('t-list'); document.getElementById('t-cnt').textContent=S.topics.length; l.innerHTML='';
+  S.topics.forEach(t=>{const e=mk('div','li');e.innerHTML=`<div class="li-hd"><span class="badge b-blue">T${t.id+1}</span><span class="li-r">msgs ${t.start}-${t.end}</span></div><div class="li-title">${esc(t.topic)}</div><div class="li-body">${esc(t.summary||'')}</div>`;e.onclick=()=>toggle(e);l.appendChild(e);});
+}
+function renderChunks(){
+  const l=document.getElementById('c-list'); document.getElementById('c-cnt').textContent=S.chunks.length; l.innerHTML='';
+  S.chunks.forEach(c=>{const e=mk('div','li');e.innerHTML=`<div class="li-hd"><span class="badge b-cyan">B${c.id+1}</span><span class="li-r">msgs ${c.start}-${c.end}</span></div><div class="li-body">${esc(c.summary||'')}</div>`;e.onclick=()=>toggle(e);l.appendChild(e);});
+}
+async function doRAGQuery(){
+  const q=document.getElementById('rag-q').value.trim(); if(!q)return;
+  setLoading('rag-spin',true); setLoading('rag-ask-btn',true,'…');
+  document.getElementById('rag-ans').style.display='none';
+  try {
+    const d=await post('/rag/query',{query:q,topic_checkpoints:S.topics,chunk_summaries:S.chunks});
+    document.getElementById('rag-ans').style.display='block';
+    document.getElementById('rag-ans').innerHTML=`<div class="ans"><div class="ans-lbl">Answer</div><div class="ans-txt">${esc(d.answer)}</div></div>`;
+  } catch(e){alert('Error: '+e.message);}
+  setLoading('rag-spin',false); setLoading('rag-ask-btn',false,'Ask');
+}
+
+// ── Chat ─────────────────────────────────────────────────────────────────────
+function ci(el){document.getElementById('chat-in').value=el.textContent;}
+async function doChat(){
+  const input=document.getElementById('chat-in'); const msg=input.value.trim(); if(!msg)return;
+  input.value=''; document.getElementById('send-btn').disabled=true;
+  S.history.push({role:'user',content:msg}); addMsg('u',msg); const t=addTyping();
+  try {
+    const d=await post('/chat',{messages:S.history,persona:S.persona||{}});
+    t.remove(); S.history.push({role:'assistant',content:d.reply||d.error}); addMsg('b',d.reply||d.error);
+  } catch(e){t.remove();addMsg('b','Error: '+e.message);}
+  document.getElementById('send-btn').disabled=false; scrollMsgs();
+}
+function addMsg(r,text){const msgs=document.getElementById('msgs');const d=mk('div','msg '+(r==='u'?'u':''));d.innerHTML=r==='u'?`<div class="bubble u">${esc(text)}</div>`:`<div class="m-ava">◈</div><div class="bubble b">${esc(text)}</div>`;msgs.appendChild(d);scrollMsgs();return d;}
+function addTyping(){const msgs=document.getElementById('msgs');const d=mk('div','msg');d.innerHTML='<div class="m-ava">◈</div><div class="typing"><span></span><span></span><span></span></div>';msgs.appendChild(d);scrollMsgs();return d;}
+function scrollMsgs(){const m=document.getElementById('msgs');m.scrollTop=m.scrollHeight;}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+async function get(path){const r=await fetch(API+path);if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json();}
+async function post(path,body){const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){const t=await r.text();throw new Error(t.slice(0,200));}return r.json();}
+function mk(tag,cls){const e=document.createElement(tag);e.className=cls;return e;}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function toggle(el){const b=el.querySelector('.li-body');const open=b.style.display==='block';b.style.display=open?'none':'block';el.classList.toggle('open',!open);}
+function setLoading(id,on,txt){const el=document.getElementById(id);if(!el)return;if(el.tagName==='BUTTON'){el.disabled=on;if(txt)el.textContent=txt;}else{el.style.display=on?'flex':'none';}}
+</script>
+</body>
+</html>
