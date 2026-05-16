@@ -492,10 +492,6 @@ def index_checkpoints():
     return jsonify({"topic_checkpoints_indexed": 0, "chunk_summaries_indexed": 0, "note": "Using keyword search in v3"})
 
 
-if __name__ == "__main__":
-    print("🚀 ConvoRAG v3 at http://localhost:5000\n")
-    app.run(debug=True, port=5000)
-
 import os
 
 if __name__ == "__main__":
